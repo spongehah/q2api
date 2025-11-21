@@ -447,10 +447,12 @@ class VirtualScroll {
     this.container.appendChild(this.viewport);
     
     this.container.addEventListener('scroll', () => this.onScroll());
-    this.render();
-    
-    // Auto-measure after first render
-    requestAnimationFrame(() => this.measureAndAdjust());
+
+    // Delay initial render to ensure container is ready
+    requestAnimationFrame(() => {
+      this.render();
+      requestAnimationFrame(() => this.measureAndAdjust());
+    });
   }
   
   onScroll() {
@@ -501,7 +503,7 @@ class VirtualScroll {
   
   render() {
     const scrollTop = this.container.scrollTop;
-    const containerHeight = this.container.clientHeight;
+    const containerHeight = this.container.clientHeight || 600;
     
     const start = Math.floor(scrollTop / this.itemHeight);
     const end = Math.ceil((scrollTop + containerHeight) / this.itemHeight);
@@ -510,7 +512,9 @@ class VirtualScroll {
     const bufferedEnd = Math.min(this.items.length, end + this.bufferSize);
     
     if (bufferedStart === this.visibleStart && bufferedEnd === this.visibleEnd) {
-      return;
+      if (this.renderedItems.size > 0) {
+        return;
+      }
     }
     
     this.visibleStart = bufferedStart;
@@ -557,9 +561,13 @@ class VirtualScroll {
     this.renderedItems.clear();
     this.measuredHeights.clear();
     this.heightAdjusted = false;
+    this.visibleStart = -1;
+    this.visibleEnd = -1;
     this.content.innerHTML = '';
-    this.render();
-    requestAnimationFrame(() => this.measureAndAdjust());
+    requestAnimationFrame(() => {
+      this.render();
+      requestAnimationFrame(() => this.measureAndAdjust());
+    });
   }
   
   destroy() {
