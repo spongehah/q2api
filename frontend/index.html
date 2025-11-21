@@ -113,11 +113,11 @@
       box-shadow:0 2px 8px rgba(0,0,0,.2);
     }
     .list { position:relative; max-height:600px; overflow:auto; padding:2px; }
+    .list-viewport { position:relative; }
     .list::-webkit-scrollbar { width:8px; }
     .list::-webkit-scrollbar-track { background:rgba(0,0,0,.2); border-radius:4px; }
     .list::-webkit-scrollbar-thumb { background:rgba(79,143,255,.3); border-radius:4px; }
     .list::-webkit-scrollbar-thumb:hover { background:rgba(79,143,255,.5); }
-    .list-viewport { position:relative; }
     .list-content { display:flex; flex-direction:column; gap:12px; }
     .card {
       border:1px solid var(--border);
@@ -193,10 +193,10 @@
     <h1>v2 前端控制台</h1>
 
     <div class="tabs">
-      <button class="tab active" onclick="switchTab('accounts')">账号管理</button>
-      <button class="tab" onclick="switchTab('create')">创建账号</button>
-      <button class="tab" onclick="switchTab('login')">URL登录</button>
-      <button class="tab" onclick="switchTab('chat')">Chat测试</button>
+      <button class="tab active" onclick="switchTab('accounts', event)">账号管理</button>
+      <button class="tab" onclick="switchTab('create', event)">创建账号</button>
+      <button class="tab" onclick="switchTab('login', event)">URL登录</button>
+      <button class="tab" onclick="switchTab('chat', event)">Chat测试</button>
     </div>
 
     <div id="tab-accounts" class="tab-content active">
@@ -302,10 +302,10 @@
 
 
 <script>
-function switchTab(name) {
+function switchTab(name, evt) {
   document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
   document.querySelectorAll('.tab-content').forEach(c => c.classList.remove('active'));
-  event.target.classList.add('active');
+  if (evt && evt.target) evt.target.classList.add('active');
   document.getElementById('tab-' + name).classList.add('active');
 }
 
@@ -347,10 +347,12 @@ function createAccountCard(acc) {
   chk.type = 'checkbox';
   chk.checked = !!acc.enabled;
   chk.onchange = async () => {
+    const prevState = !chk.checked;
     try {
       await updateAccount(acc.id, { enabled: chk.checked });
     } catch(e) {
-      chk.checked = !chk.checked;
+      chk.checked = prevState;
+      alert('❌ 切换状态失败：' + e.message);
     }
   };
   const slider = document.createElement('span');
@@ -456,31 +458,32 @@ class VirtualScroll {
   }
   
   measureAndAdjust() {
+    if (this.heightAdjusted) return; // Only adjust once
+
     let maxHeight = 0;
     let needsAdjustment = false;
-    
+
     // Measure all currently rendered items
     for (const [idx, element] of this.renderedItems.entries()) {
       const rect = element.getBoundingClientRect();
       const actualHeight = rect.height + 12; // +12 for gap
       this.measuredHeights.set(idx, actualHeight);
-      
+
       if (actualHeight > maxHeight) {
         maxHeight = actualHeight;
       }
-      
+
       // Check if actual height exceeds estimated height
       if (actualHeight > this.itemHeight * 0.95) {
         needsAdjustment = true;
       }
     }
-    
+
     // Auto-adjust if needed
     if (needsAdjustment && maxHeight > this.itemHeight) {
-      console.log(`[VirtualScroll] 检测到重影，调整高度: ${this.itemHeight}px -> ${Math.ceil(maxHeight)}px`);
       this.itemHeight = Math.ceil(maxHeight);
       this.heightAdjusted = true;
-      
+
       // Re-render with new height
       this.reposition();
     }
@@ -526,8 +529,7 @@ class VirtualScroll {
     
     // Add items in visible range
     const fragment = document.createDocumentFragment();
-    let newItemsAdded = false;
-    
+
     for (let i = bufferedStart; i < bufferedEnd; i++) {
       if (!this.renderedItems.has(i)) {
         const item = createAccountCard(this.items[i]);
@@ -537,15 +539,14 @@ class VirtualScroll {
         item.style.right = '0';
         this.renderedItems.set(i, item);
         fragment.appendChild(item);
-        newItemsAdded = true;
       }
     }
-    
+
     if (fragment.childNodes.length > 0) {
       this.content.appendChild(fragment);
-      
-      // Measure new items after they're added to DOM
-      if (newItemsAdded && !this.heightAdjusted) {
+
+      // Measure new items after they're added to DOM (only once)
+      if (!this.heightAdjusted) {
         requestAnimationFrame(() => this.measureAndAdjust());
       }
     }
@@ -571,7 +572,7 @@ class VirtualScroll {
 function renderAccounts(list){
   accountsData = list;
   const root = document.getElementById('accounts');
-  
+
   if (!Array.isArray(list) || list.length === 0) {
     if (virtualScroll) {
       virtualScroll.destroy();
@@ -579,15 +580,15 @@ function renderAccounts(list){
     }
     root.innerHTML = '';
     const empty = document.createElement('div');
-    empty.className = 'muted';
-    empty.textContent = '暂无账号';
+    empty.style.cssText = 'padding:40px 20px;text-align:center;color:var(--muted);';
+    empty.innerHTML = '<div style="font-size:48px;margin-bottom:16px;">📭</div><div style="font-size:16px;margin-bottom:8px;">暂无账号</div><div style="font-size:13px;">请前往"创建账号"或"URL登录"标签页添加账号</div>';
     root.appendChild(empty);
     return;
   }
-  
+
   // Estimate item height (card height ~280px with gap)
   const estimatedItemHeight = 292;
-  
+
   if (virtualScroll) {
     virtualScroll.update(list);
   } else {
@@ -598,14 +599,27 @@ function renderAccounts(list){
 async function loadAccounts(){
   try{
     const r = await fetch(api('/v2/accounts'));
+    if (!r.ok) throw new Error(`HTTP ${r.status}: ${await r.text()}`);
     const j = await r.json();
+    if (!Array.isArray(j)) {
+      console.error('API 返回非数组数据:', j);
+      renderAccounts([]);
+      return;
+    }
     renderAccounts(j);
   } catch(e){
-    alert('加载账户失败：' + e);
+    console.error('加载账户失败:', e);
+    alert('加载账户失败：' + e.message);
+    renderAccounts([]);
   }
 }
 
 async function createAccount(){
+  const btn = event.target;
+  const originalText = btn.textContent;
+  btn.disabled = true;
+  btn.textContent = '创建中...';
+
   const body = {
     label: document.getElementById('new_label').value.trim() || null,
     clientId: document.getElementById('new_clientId').value.trim(),
@@ -616,7 +630,7 @@ async function createAccount(){
     other: (()=>{
       const t = document.getElementById('new_other').value.trim();
       if (!t) return null;
-      try { return JSON.parse(t); } catch { alert('other 不是合法 JSON'); throw new Error('bad other'); }
+      try { return JSON.parse(t); } catch { alert('other 字段不是合法 JSON 格式'); throw new Error('bad other'); }
     })()
   };
   try{
@@ -629,9 +643,20 @@ async function createAccount(){
       const t = await r.text();
       throw new Error(t);
     }
+    alert('✅ 账号创建成功！');
     await loadAccounts();
+    // 清空表单
+    document.getElementById('new_label').value = '';
+    document.getElementById('new_clientId').value = '';
+    document.getElementById('new_clientSecret').value = '';
+    document.getElementById('new_refreshToken').value = '';
+    document.getElementById('new_accessToken').value = '';
+    document.getElementById('new_other').value = '';
   } catch(e){
-    alert('创建失败：' + e);
+    alert('❌ 创建失败：' + e.message);
+  } finally {
+    btn.disabled = false;
+    btn.textContent = originalText;
   }
 }
 
@@ -641,8 +666,9 @@ async function deleteAccount(id){
     const r = await fetch(api('/v2/accounts/' + encodeURIComponent(id)), { method:'DELETE' });
     if (!r.ok) { throw new Error(await r.text()); }
     await loadAccounts();
+    alert('✅ 账号已删除');
   } catch(e){
-    alert('删除失败：' + e);
+    alert('❌ 删除失败：' + e.message);
   }
 }
 
@@ -656,7 +682,8 @@ async function updateAccount(id, patch){
     if (!r.ok) { throw new Error(await r.text()); }
     await loadAccounts();
   } catch(e){
-    alert('更新失败：' + e);
+    alert('❌ 更新失败：' + e.message);
+    throw e;
   }
 }
 
@@ -665,14 +692,21 @@ async function refreshAccount(id){
     const r = await fetch(api('/v2/accounts/' + encodeURIComponent(id) + '/refresh'), { method:'POST' });
     if (!r.ok) { throw new Error(await r.text()); }
     await loadAccounts();
+    alert('✅ Token 刷新成功');
   } catch(e){
-    alert('刷新失败：' + e);
+    alert('❌ 刷新失败：' + e.message);
   }
 }
 
  // URL Login (Device Authorization)
  let currentAuth = null;
+ let isClaimingAuth = false;
  async function startAuth(){
+   const btn = event.target;
+   const originalText = btn.textContent;
+   btn.disabled = true;
+   btn.textContent = '启动中...';
+
    const body = {
      label: (document.getElementById('auth_label').value || '').trim() || null,
      enabled: document.getElementById('auth_enabled').checked
@@ -687,73 +721,119 @@ async function refreshAccount(id){
      const j = await r.json();
      currentAuth = j;
      const info = [
-       '验证链接: ' + j.verificationUriComplete,
-       '用户代码: ' + (j.userCode || ''),
-       'authId: ' + j.authId,
-       'expiresIn: ' + j.expiresIn + 's',
-       'interval: ' + j.interval + 's'
-     ].join('\\n');
+       '✅ 授权流程已启动！',
+       '',
+       '📋 验证链接: ' + j.verificationUriComplete,
+       '🔑 用户代码: ' + (j.userCode || ''),
+       '🆔 会话ID: ' + j.authId,
+       '⏱️  过期时间: ' + j.expiresIn + '秒',
+       '',
+       '👉 请在新窗口中打开上述链接完成登录',
+       '👉 登录完成后，点击下方"等待授权并创建账号"按钮'
+     ].join('\n');
      const el = document.getElementById('auth_info');
-     el.textContent = info + '\\n\\n请在新窗口中打开上述链接完成登录。';
+     el.textContent = info;
      try { window.open(j.verificationUriComplete, '_blank'); } catch {}
    } catch(e){
-     document.getElementById('auth_info').textContent = '启动失败：' + e;
+     document.getElementById('auth_info').textContent = '❌ 启动失败：' + e.message;
+   } finally {
+     btn.disabled = false;
+     btn.textContent = originalText;
    }
  }
 
  async function claimAuth(){
    if (!currentAuth || !currentAuth.authId) {
-     document.getElementById('auth_info').textContent = '请先点击“开始登录”。';
+     alert('⚠️ 请先点击"开始登录"按钮');
      return;
    }
-   document.getElementById('auth_info').textContent += '\\n\\n正在等待授权并创建账号（最多5分钟）...';
+   if (isClaimingAuth) {
+     alert('⚠️ 正在等待授权中，请勿重复点击');
+     return;
+   }
+
+   const btn = event.target;
+   const originalText = btn.textContent;
+   btn.disabled = true;
+   btn.textContent = '等待中...';
+   isClaimingAuth = true;
+
+   const authInfo = document.getElementById('auth_info');
+   const originalInfo = authInfo.textContent;
+   authInfo.textContent = originalInfo + '\n\n⏳ 正在等待授权并创建账号（最多5分钟）...\n请耐心等待，不要关闭页面...';
+
    try{
      const r = await fetch(api('/v2/auth/claim/' + encodeURIComponent(currentAuth.authId)), { method: 'POST' });
-     const text = await r.text();
-     let j;
-     try { j = JSON.parse(text); } catch { j = { raw: text }; }
-     document.getElementById('auth_info').textContent = '完成：\\n' + JSON.stringify(j, null, 2);
+     if (!r.ok) throw new Error(await r.text());
+     const j = await r.json();
+     authInfo.textContent = '🎉 授权成功！账号已创建！\n\n' + JSON.stringify(j, null, 2);
      await loadAccounts();
+     currentAuth = null;
+     document.getElementById('auth_label').value = '';
    } catch(e){
-     document.getElementById('auth_info').textContent += '\\n失败：' + e;
+     authInfo.textContent = originalInfo + '\n\n❌ 失败：' + e.message + '\n\n请检查：\n1. 是否已在授权页面完成登录\n2. 授权是否已过期（5分钟）\n3. 网络连接是否正常';
+   } finally {
+     btn.disabled = false;
+     btn.textContent = originalText;
+     isClaimingAuth = false;
    }
  }
 
 async function send() {
+  const btn = event.target;
+  const originalText = btn.textContent;
+  btn.disabled = true;
+  btn.textContent = '发送中...';
+
   const model = document.getElementById('model').value.trim();
   const stream = document.getElementById('stream').value === 'true';
   const out = document.getElementById('out');
-  out.textContent = '';
+  out.textContent = '⏳ 请求中...';
 
   let messages;
   try { messages = JSON.parse(document.getElementById('messages').value); }
-  catch(e){ out.textContent = 'messages 不是合法 JSON'; return; }
+  catch(e){
+    out.textContent = '❌ messages 不是合法 JSON 格式';
+    btn.disabled = false;
+    btn.textContent = originalText;
+    return;
+  }
 
   const body = { model, messages, stream };
   const headers = { 'content-type': 'application/json' };
 
-  if (!stream) {
-    const r = await fetch(api('/v1/chat/completions'), {
-      method:'POST',
-      headers,
-      body: JSON.stringify(body)
-    });
-    const text = await r.text();
-    try { out.textContent = JSON.stringify(JSON.parse(text), null, 2); }
-    catch { out.textContent = text; }
-  } else {
-    const r = await fetch(api('/v1/chat/completions'), {
-      method:'POST',
-      headers,
-      body: JSON.stringify(body)
-    });
-    const reader = r.body.getReader();
-    const decoder = new TextDecoder();
-    while (true) {
-      const {value, done} = await reader.read();
-      if (done) break;
-      out.textContent += decoder.decode(value, {stream:true});
+  try {
+    if (!stream) {
+      const r = await fetch(api('/v1/chat/completions'), {
+        method:'POST',
+        headers,
+        body: JSON.stringify(body)
+      });
+      if (!r.ok) throw new Error(`HTTP ${r.status}: ${await r.text()}`);
+      const text = await r.text();
+      try { out.textContent = JSON.stringify(JSON.parse(text), null, 2); }
+      catch { out.textContent = text; }
+    } else {
+      out.textContent = '';
+      const r = await fetch(api('/v1/chat/completions'), {
+        method:'POST',
+        headers,
+        body: JSON.stringify(body)
+      });
+      if (!r.ok) throw new Error(`HTTP ${r.status}: ${await r.text()}`);
+      const reader = r.body.getReader();
+      const decoder = new TextDecoder();
+      while (true) {
+        const {value, done} = await reader.read();
+        if (done) break;
+        out.textContent += decoder.decode(value, {stream:true});
+      }
     }
+  } catch(e) {
+    out.textContent = '❌ 请求失败：' + e.message;
+  } finally {
+    btn.disabled = false;
+    btn.textContent = originalText;
   }
 }
 

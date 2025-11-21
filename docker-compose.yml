@@ -18,7 +18,7 @@ services:
       - FEEDER_PORT=${FEEDER_PORT:-8001}
       - API_SERVER=${API_SERVER:-http://localhost:8000}
     volumes:
-      - ./data.sqlite3:/app/data.sqlite3
+      - ./:/app
     restart: unless-stopped
     command: >
       sh -c "uvicorn app:app --host 0.0.0.0 --port 8000 --workers 4 &

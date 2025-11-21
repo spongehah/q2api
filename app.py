@@ -1188,6 +1188,45 @@ if CONSOLE_ENABLED:
     async def manual_refresh(account_id: str):
         return await refresh_access_token_in_db(account_id)
 
+    @app.post("/v2/accounts/verify-disabled")
+    async def manual_verify_disabled():
+        """手动触发验证禁用账号"""
+        results = {"verified": 0, "re_enabled": 0, "still_disabled": 0, "skipped": 0}
+        async with _conn() as conn:
+            accounts = await _list_disabled_accounts(conn)
+            for account in accounts:
+                other = account.get('other')
+                if other:
+                    try:
+                        other_dict = json.loads(other) if isinstance(other, str) else other
+                        if other_dict.get('failedReason') == 'AccessDenied':
+                            results["skipped"] += 1
+                            continue
+                    except:
+                        pass
+                try:
+                    verify_success, fail_reason = await verify_account(account)
+                    now = time.strftime("%Y-%m-%dT%H:%M:%S", time.gmtime())
+                    results["verified"] += 1
+                    if verify_success:
+                        await conn.execute("UPDATE accounts SET enabled=1, updated_at=? WHERE id=?", (now, account['id']))
+                        results["re_enabled"] += 1
+                    else:
+                        results["still_disabled"] += 1
+                        if fail_reason:
+                            other_dict = {}
+                            if account.get('other'):
+                                try:
+                                    other_dict = json.loads(account['other']) if isinstance(account['other'], str) else account['other']
+                                except:
+                                    pass
+                            other_dict['failedReason'] = fail_reason
+                            await conn.execute("UPDATE accounts SET other=?, updated_at=? WHERE id=?", (json.dumps(other_dict, ensure_ascii=False), now, account['id']))
+                    await conn.commit()
+                except Exception as e:
+                    pass
+        return results
+
     # ------------------------------------------------------------------------------
     # Simple Frontend (minimal dev test page; full UI in v2/frontend/index.html)
     # ------------------------------------------------------------------------------

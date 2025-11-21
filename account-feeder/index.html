@@ -222,15 +222,28 @@
   </div>
 
 <script>
+// API base URL configuration
+const API_BASE = window.location.origin;
+
+function api(path) {
+  const pathClean = ('/' + (path || '').replace(/^\/+/, '')).replace(/\/{2,}/g, '/');
+  return API_BASE + pathClean;
+}
+
 let currentAuth = null;
 
 async function startAuth(){
+  const btn = event.target;
+  const originalText = btn.textContent;
+  btn.disabled = true;
+  btn.textContent = '启动中...';
+
   const body = {
     label: (document.getElementById('auth_label').value || '').trim() || null,
     enabled: true
   };
   try {
-    const r = await fetch('/auth/start', {
+    const r = await fetch(api('/auth/start'), {
       method: 'POST',
       headers: { 'content-type': 'application/json' },
       body: JSON.stringify(body)
@@ -254,7 +267,10 @@ async function startAuth(){
     el.textContent = info;
     try { window.open(j.verificationUriComplete, '_blank'); } catch {}
   } catch(e){
-    document.getElementById('auth_info').textContent = '❌ 启动失败：' + e;
+    document.getElementById('auth_info').textContent = '❌ 启动失败：' + e.message;
+  } finally {
+    btn.disabled = false;
+    btn.textContent = originalText;
   }
 }
 
@@ -263,12 +279,18 @@ async function claimAuth(){
     alert('⚠️ 请先点击"开始登录"按钮');
     return;
   }
+
+  const btn = event.target;
+  const originalBtnText = btn.textContent;
+  btn.disabled = true;
+  btn.textContent = '等待中...';
+
   const authInfo = document.getElementById('auth_info');
   const originalText = authInfo.textContent;
   authInfo.textContent = originalText + '\n\n⏳ 正在等待授权并创建账号（最多5分钟）...\n请耐心等待，不要关闭页面...';
 
   try{
-    const r = await fetch('/auth/claim/' + encodeURIComponent(currentAuth.authId), { method: 'POST' });
+    const r = await fetch(api('/auth/claim/' + encodeURIComponent(currentAuth.authId)), { method: 'POST' });
     if (!r.ok) {
       const errorText = await r.text();
       throw new Error(errorText);
@@ -291,6 +313,9 @@ async function claimAuth(){
     }
   } catch(e){
     authInfo.textContent = originalText + '\n\n❌ 失败：' + e.message + '\n\n请检查：\n1. 是否已在授权页面完成登录\n2. 主服务是否正常运行\n3. 网络连接是否正常';
+  } finally {
+    btn.disabled = false;
+    btn.textContent = originalBtnText;
   }
 }
 
@@ -306,11 +331,16 @@ async function createSingle(){
     return;
   }
 
+  const btn = event.target;
+  const originalText = btn.textContent;
+  btn.disabled = true;
+  btn.textContent = '创建中...';
+
   const result = document.getElementById('manual_result');
   result.textContent = '⏳ 正在创建账号...';
 
   try {
-    const r = await fetch('/accounts/create', {
+    const r = await fetch(api('/accounts/create'), {
       method: 'POST',
       headers: { 'content-type': 'application/json' },
       body: JSON.stringify({
@@ -334,6 +364,9 @@ async function createSingle(){
     document.getElementById('manual_accessToken').value = '';
   } catch(e){
     result.textContent = '❌ 创建失败：' + e.message;
+  } finally {
+    btn.disabled = false;
+    btn.textContent = originalText;
   }
 }
 
@@ -353,11 +386,16 @@ async function createBatch(){
     return;
   }
 
+  const btn = event.target;
+  const originalText = btn.textContent;
+  btn.disabled = true;
+  btn.textContent = '创建中...';
+
   const result = document.getElementById('batch_result');
   result.textContent = `⏳ 开始批量创建 ${accounts.length} 个账号...\n`;
 
   try {
-    const r = await fetch('/accounts/batch', {
+    const r = await fetch(api('/accounts/batch'), {
       method: 'POST',
       headers: { 'content-type': 'application/json' },
       body: JSON.stringify({ accounts })
@@ -370,8 +408,16 @@ async function createBatch(){
       `失败：${j.failed} 个\n` +
       `总计：${j.total} 个\n\n` +
       `详细结果：\n${JSON.stringify(j.results, null, 2)}`;
+
+    // 清空表单
+    if (j.success > 0) {
+      document.getElementById('batch_json').value = '';
+    }
   } catch(e){
     result.textContent = '❌ 批量创建失败：' + e.message;
+  } finally {
+    btn.disabled = false;
+    btn.textContent = originalText;
   }
 }
 </script>
