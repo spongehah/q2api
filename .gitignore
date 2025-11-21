@@ -44,3 +44,9 @@ wheels/
 # OS
 .DS_Store
 Thumbs.db
+
+# vibe coding
+.mcp.json
+.claude
+.serena
+.codex

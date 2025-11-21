@@ -18,10 +18,10 @@ services:
       - FEEDER_PORT=${FEEDER_PORT:-8001}
       - API_SERVER=${API_SERVER:-http://localhost:8000}
     volumes:
-      - ./data:/app/data
+      - ./data.sqlite3:/app/data.sqlite3
     restart: unless-stopped
     command: >
-      sh -c "uvicorn app:app --host 0.0.0.0 --port ${PORT:-8000} --workers 4 &
+      sh -c "uvicorn app:app --host 0.0.0.0 --port 8000 --workers 4 &
              cd account-feeder && python app.py"
     healthcheck:
       test: ["CMD", "sh", "-c", "curl -f http://localhost:8000/healthz && curl -f http://localhost:8001/health"]
