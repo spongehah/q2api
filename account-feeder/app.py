@@ -20,7 +20,6 @@ from dotenv import load_dotenv
 load_dotenv()
 
 # 配置
-PORT = int(os.getenv("FEEDER_PORT", "8001"))
 API_SERVER = os.getenv("API_SERVER", "http://localhost:8000")
 
 # OIDC 端点
@@ -317,8 +316,14 @@ async def health():
 
 
 if __name__ == "__main__":
+    import sys
+    port = 8001
+    for i, arg in enumerate(sys.argv):
+        if arg == "--port" and i + 1 < len(sys.argv):
+            port = int(sys.argv[i + 1])
+            break
     print(f"🚀 Amazon Q 账号投喂服务启动中...")
-    print(f"📍 监听端口: {PORT}")
+    print(f"📍 监听端口: {port}")
     print(f"🔗 主服务地址: {API_SERVER}")
-    print(f"🌐 访问地址: http://localhost:{PORT}")
-    uvicorn.run(app, host="0.0.0.0", port=PORT)
+    print(f"🌐 访问地址: http://localhost:{port}")
+    uvicorn.run(app, host="0.0.0.0", port=port)
