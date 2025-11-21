@@ -34,6 +34,8 @@ def get_current_timestamp() -> str:
 def map_model_name(claude_model: str) -> str:
     """Map Claude model name to Amazon Q model ID."""
     model_lower = claude_model.lower()
+    if model_lower.startswith("claude-haiku-4.5") or model_lower.startswith("claude-haiku-4-5"):
+        return "claude-haiku-4.5"
     if model_lower.startswith("claude-sonnet-4.5") or model_lower.startswith("claude-sonnet-4-5"):
         return "claude-sonnet-4.5"
     return "claude-sonnet-4"
